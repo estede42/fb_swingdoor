@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Freibad Swingdoor</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font-family: system-ui, sans-serif;
+    background: #3fa9f5 url('/freibad.jpg') center / cover no-repeat fixed;
+  }
+  .main-btn {
+    font-size: 1.4rem; padding: 1rem 2.2rem; border: none; border-radius: 999px;
+    background: #ff8c1a; color: #fff; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,.3);
+  }
+  .main-btn:hover { background: #e67700; }
+  dialog {
+    border: none; border-radius: 14px; padding: 1.6rem; width: min(92vw, 380px);
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+  }
+  dialog::backdrop { background: rgba(0,40,80,.45); }
+  h2 { margin: 0 0 1rem; }
+  label { display: block; font-weight: 600; margin: .8rem 0 .3rem; }
+  input, select {
+    width: 100%; padding: .6rem; font-size: 1rem;
+    border: 1px solid #aac; border-radius: 8px;
+  }
+  .actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1.3rem; }
+  .actions button { padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: none; cursor: pointer; }
+  .ok { background: #1a8cff; color: #fff; }
+  .cancel { background: #ddd; }
+  .tag-row { display: flex; gap: .5rem; }
+  .tag-row input { flex: 1; min-width: 0; }
+  .scan-btn {
+    flex: none; padding: 0 .8rem; font-size: .85rem; white-space: nowrap;
+    border: 1px solid #1a8cff; border-radius: 8px; background: #eaf4ff;
+    color: #1a6fcc; cursor: pointer;
+  }
+  .scan-btn:disabled { opacity: .5; cursor: wait; }
+  #scanHint {
+    display: none; margin-top: .5rem; padding: .6rem .8rem; border-radius: 8px;
+    background: #fff4e0; color: #8a4b00; font-size: .9rem;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  #scanHint.show { display: block; }
+  @keyframes pulse { 50% { background: #ffe2b3; } }
+  #msg { margin-top: .9rem; min-height: 1.2em; font-weight: 600; }
+  #msg.err { color: #c62828; }
+  #msg.good { color: #2e7d32; }
+</style>
+</head>
+<body>
+  <button class="main-btn" id="open">Tag anlegen</button>
+
+  <dialog id="dlg">
+    <form id="tagform">
+      <h2>Neuer Tag</h2>
+
+      <label for="tagID">Tag Nummer</label>
+      <div class="tag-row">
+        <input id="tagID" name="tagID" required pattern="[A-Za-z0-9]+"
+               title="Nur Buchstaben und Ziffern" autocomplete="off">
+        <button type="button" class="scan-btn" id="scan">Tag einlesen</button>
+      </div>
+      <div id="scanHint">Bitte jetzt den RFID-Tag an das Lesegerät halten …</div>
+
+      <label for="pin">PIN</label>
+      <input id="pin" name="pin" type="password" inputmode="numeric" required
+             pattern="[0-9]{3,}" title="Mindestens 3 Ziffern" autocomplete="off">
+
+      <label for="type">Typ</label>
+      <select id="type" name="type" required>
+        {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+
+      <div id="msg"></div>
+      <div class="actions">
+        <button type="button" class="cancel" id="close">Abbrechen</button>
+        <button type="submit" class="ok">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+<script>
+  const dlg = document.getElementById('dlg');
+  const form = document.getElementById('tagform');
+  const msg = document.getElementById('msg');
+
+  const scanBtn = document.getElementById('scan');
+  const scanHint = document.getElementById('scanHint');
+  const tagInput = document.getElementById('tagID');
+  let scanning = false;
+
+  function showMsg(text, ok) {
+    msg.textContent = text;
+    msg.className = ok ? 'good' : 'err';
+  }
+
+  function stopScanUI() {
+    scanning = false;
+    scanBtn.disabled = false;
+    scanHint.classList.remove('show');
+  }
+
+  scanBtn.onclick = async () => {
+    scanning = true;
+    scanBtn.disabled = true;
+    scanHint.classList.add('show');
+    msg.textContent = ''; msg.className = '';
+    try {
+      const res = await fetch('/api/read_tag', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        tagInput.value = data.tagID;
+        showMsg('Tag erkannt: ' + data.tagID, true);
+      } else if (scanning) {   // nach Abbrechen keine Fehlermeldung zeigen
+        showMsg(data.message, false);
+      }
+    } catch (err) {
+      if (scanning) showMsg('Server nicht erreichbar.', false);
+    } finally {
+      stopScanUI();
+    }
+  };
+
+  // Läuft beim Schließen noch ein Lesevorgang, wird er auf dem Server beendet
+  dlg.addEventListener('close', () => {
+    if (scanning) {
+      scanning = false;
+      fetch('/api/read_tag/cancel', { method: 'POST' });
+    }
+  });
+
+  document.getElementById('open').onclick = () => {
+    form.reset(); msg.textContent = ''; msg.className = '';
+    stopScanUI();
+    dlg.showModal();
+  };
+  document.getElementById('close').onclick = () => dlg.close();
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/tags', { method: 'POST', body: new FormData(form) });
+      const data = await res.json();
+      msg.textContent = data.message;
+      msg.className = res.ok ? 'good' : 'err';
+      if (res.ok) { form.reset(); setTimeout(() => dlg.close(), 1200); }
+    } catch (err) {
+      msg.textContent = 'Server nicht erreichbar.';
+      msg.className = 'err';
+    }
+  };
+</script>
+</body>
+</html>
