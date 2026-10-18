@@ -33,8 +33,7 @@ app = Flask(__name__, template_folder=str(BASE_DIR / "templates"))
 
 @app.get("/")
 def index():
-    return render_template("index.html", types=TAG_TYPES)
-
+  return render_template("index.html", types=TAG_TYPES)
 
 @app.get("/freibad.jpg")
 def background():

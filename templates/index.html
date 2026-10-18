@@ -56,6 +56,7 @@
 <body>
   <button class="main-btn" id="open">Tag anlegen</button>
 
+
   <dialog id="dlg">
     <form id="tagform">
       <h2>Neuer Tag</h2>
@@ -74,7 +75,7 @@
 
       <label for="type">Typ</label>
       <select id="type" name="type" required>
-        {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      	{% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
       </select>
 
       <div id="msg"></div>
@@ -86,6 +87,7 @@
   </dialog>
 
 <script>
+  
   const dlg = document.getElementById('dlg');
   const form = document.getElementById('tagform');
   const msg = document.getElementById('msg');
