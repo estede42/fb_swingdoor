@@ -47,6 +47,9 @@ def create_tag():
             request.form.get("tagID", ""),
             request.form.get("pin", ""),
             request.form.get("type", ""),
+            request.form.get("zaehler", ""),
+            request.form.get("besitzer", ""),
+            request.form.get("ausgabedatum", ""),
         )
     except TagError as e:
         return jsonify(message=str(e)), 400

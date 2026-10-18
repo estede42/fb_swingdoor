@@ -75,8 +75,17 @@
 
       <label for="type">Typ</label>
       <select id="type" name="type" required>
-      	{% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      	{% for kuerzel, name in types.items() %}<option value="{{ kuerzel }}">{{ name }}</option>{% endfor %}
       </select>
+
+      <label for="zaehler">Zähler</label>
+      <input id="zaehler" name="zaehler" type="number" min="0" step="1" value="0" required>
+
+      <label for="besitzer">Besitzer</label>
+      <input id="besitzer" name="besitzer" autocomplete="off" placeholder="optional">
+
+      <label for="ausgabedatum">Ausgabedatum</label>
+      <input id="ausgabedatum" name="ausgabedatum" type="date" required>
 
       <div id="msg"></div>
       <div class="actions">
@@ -95,11 +104,20 @@
   const scanBtn = document.getElementById('scan');
   const scanHint = document.getElementById('scanHint');
   const tagInput = document.getElementById('tagID');
+  const datumInput = document.getElementById('ausgabedatum');
   let scanning = false;
 
   function showMsg(text, ok) {
     msg.textContent = text;
     msg.className = ok ? 'good' : 'err';
+  }
+
+  // Formular leeren und Ausgabedatum auf heute (lokale Zeit, JJJJ-MM-TT) setzen
+  function resetForm() {
+    form.reset();
+    const d = new Date();
+    datumInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+                     + '-' + String(d.getDate()).padStart(2, '0');
   }
 
   function stopScanUI() {
@@ -138,7 +156,7 @@
   });
 
   document.getElementById('open').onclick = () => {
-    form.reset(); msg.textContent = ''; msg.className = '';
+    resetForm(); msg.textContent = ''; msg.className = '';
     stopScanUI();
     dlg.showModal();
   };
@@ -151,7 +169,7 @@
       const data = await res.json();
       msg.textContent = data.message;
       msg.className = res.ok ? 'good' : 'err';
-      if (res.ok) { form.reset(); setTimeout(() => dlg.close(), 1200); }
+      if (res.ok) { resetForm(); setTimeout(() => dlg.close(), 1200); }
     } catch (err) {
       msg.textContent = 'Server nicht erreichbar.';
       msg.className = 'err';
