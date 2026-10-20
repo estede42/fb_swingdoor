@@ -1,0 +1,13 @@
+#sr
+# Vim Swap- und Backup-Dateien
+*~
+*.swp
+*.swo
+*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+Session.vim
+Sessionx.vim
+[._]*.un~
+sessionSwingd
+__pycache__/
