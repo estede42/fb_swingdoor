@@ -29,8 +29,8 @@ class TagError(ValueError):
     """Ungültige Eingabe oder Tag bereits vorhanden."""
 
 
-def add_tag(tag_id, pin, tag_type, zaehler=0, besitzer=None, ausgabedatum=None, db_path=DB_PATH):
-    #Trägt einen Tag in die Tabelle 'tags' (Spalten tagID, pin, typ, zaehler, besitzer, ausgabedatum) ein."""
+def _pruefe_felder(tag_id, pin, tag_type, zaehler, besitzer, ausgabedatum):
+    """Prüft und normalisiert die Eingaben, gibt (tag_id, pin, typ, zaehler, besitzer, ausgabedatum) zurück."""
     tag_id = str(tag_id).strip() # strip Entfernt unnötige Leerzeichen    
     pin = str(pin).strip()
     tag_type = str(tag_type).strip()
@@ -58,14 +58,25 @@ def add_tag(tag_id, pin, tag_type, zaehler=0, besitzer=None, ausgabedatum=None, 
         ausgabedatum = date.fromisoformat(ausgabedatum) if ausgabedatum else date.today()
     except ValueError:
         raise TagError("Das Ausgabedatum muss im Format JJJJ-MM-TT sein.")
+    return tag_id, pin, tag_type, zaehler, besitzer, ausgabedatum
 
-    #Die Variablen wurden vorbereitet. Jetzt müssen sie in die DB
+
+def _verbinde(db_path):
+    """Öffnet die Datenbank; Fehler, wenn die Datei fehlt (sqlite3 würde sonst eine leere anlegen)."""
     db_path = Path(db_path)
     if not db_path.exists():
         raise FileNotFoundError(f"Datenbank nicht gefunden: {db_path}")
+    return closing(sqlite3.connect(db_path))
 
+
+def add_tag(tag_id, pin, tag_type, zaehler=0, besitzer=None, ausgabedatum=None, db_path=DB_PATH):
+    #Trägt einen Tag in die Tabelle 'tags' (Spalten tagID, pin, typ, zaehler, besitzer, ausgabedatum) ein."""
+    tag_id, pin, tag_type, zaehler, besitzer, ausgabedatum = _pruefe_felder(
+        tag_id, pin, tag_type, zaehler, besitzer, ausgabedatum)
+
+    #Die Variablen wurden vorbereitet. Jetzt müssen sie in die DB
     try:
-        with closing(sqlite3.connect(db_path)) as conn, conn:
+        with _verbinde(db_path) as conn, conn:
             #die sqlite Datenbank wird am Ende dieses with-Blocks auf jeden 
             #Fall geschlossen! Das Komma (, conn:) macht aus diesem einen with 
             #Block zwei verschachtelte. Es verhält sich hier also wie with
@@ -77,6 +88,41 @@ def add_tag(tag_id, pin, tag_type, zaehler=0, besitzer=None, ausgabedatum=None, 
             )
     except sqlite3.IntegrityError:
         raise TagError(f"Der Tag '{tag_id}' existiert bereits.")
+
+
+def get_tags(db_path=DB_PATH):
+    """Liefert alle Datensätze der Tabelle 'tags' als Liste von Dicts (für die DataTables-Tabelle)."""
+    with _verbinde(db_path) as conn:
+        conn.row_factory = sqlite3.Row # Zeilen lassen sich dann wie Dicts ansprechen
+        rows = conn.execute(
+            "SELECT tagID, typ, besitzer, zaehler, ausgabedatum, pin, aktiv, geklaut"
+            " FROM tags ORDER BY tagID"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_tag(tag_id, db_path=DB_PATH):
+    """Löscht den Tag mit der angegebenen tagID."""
+    with _verbinde(db_path) as conn, conn:
+        cur = conn.execute("DELETE FROM tags WHERE tagID = ?", (str(tag_id),))
+    if cur.rowcount == 0:
+        raise TagError(f"Der Tag '{tag_id}' existiert nicht.")
+
+
+def update_tag(tag_id, pin, tag_type, zaehler=0, besitzer=None, ausgabedatum=None,
+               aktiv=False, geklaut=False, db_path=DB_PATH):
+    """Ändert einen bestehenden Tag (alle Spalten außer der tagID)."""
+    tag_id, pin, tag_type, zaehler, besitzer, ausgabedatum = _pruefe_felder(
+        tag_id, pin, tag_type, zaehler, besitzer, ausgabedatum)
+    with _verbinde(db_path) as conn, conn:
+        cur = conn.execute(
+            "UPDATE tags SET pin = ?, typ = ?, zaehler = ?, besitzer = ?, ausgabedatum = ?,"
+            " aktiv = ?, geklaut = ? WHERE tagID = ?",
+            (pin, tag_type, zaehler, besitzer, ausgabedatum.isoformat(),
+             int(bool(aktiv)), int(bool(geklaut)), tag_id),
+        )
+    if cur.rowcount == 0:
+        raise TagError(f"Der Tag '{tag_id}' existiert nicht.")
 
 
 if __name__ == "__main__": #Dieser Block ist pyhon typisch und ermöglciht, das Script auch eigenständig aufzurufen. Für meine Nutzung theoretisch irrelevant.

@@ -6,6 +6,7 @@ Erwartet im selben Ordner (~/fb_swingdoor):
   - freibad.jpg
   - rfid_reader.py
   - templates/index.html
+  - libs/ (jQuery, DataTables)
 
 Start:  python3 swingdoor_web.py   ->  http://<rechner>:8080
 """
@@ -21,7 +22,7 @@ from rfid_reader import (
     cancel_read,
     read_tag_id,
 )
-from swingdoor_sr import TAG_TYPES, TagError, add_tag
+from swingdoor_sr import TAG_TYPES, TagError, add_tag, delete_tag, get_tags, update_tag
 
 BASE_DIR = Path(__file__).resolve().parent
 HOST = "0.0.0.0"
@@ -38,6 +39,12 @@ def index():
 @app.get("/freibad.jpg")
 def background():
     return send_from_directory(BASE_DIR, "freibad.jpg")
+
+
+@app.get("/libs/<path:filename>")
+def libs(filename):
+    """Lokale Kopien von jQuery und DataTables (funktioniert auch ohne Internet)."""
+    return send_from_directory(BASE_DIR / "libs", filename)
 
 
 @app.post("/api/tags")
@@ -57,6 +64,50 @@ def create_tag():
         app.logger.exception("Fehler beim Eintragen")
         return jsonify(message=f"Datenbankfehler: {e}"), 500
     return jsonify(message="Tag gespeichert.")
+
+
+@app.get("/api/tags")
+def list_tags():
+    """Alle Tags für die DataTables-Tabelle (DataTables erwartet die Zeilen unter "data")."""
+    try:
+        return jsonify(data=get_tags())
+    except Exception as e:
+        app.logger.exception("Fehler beim Lesen")
+        return jsonify(message=f"Datenbankfehler: {e}"), 500
+
+
+@app.delete("/api/tags/<tag_id>")
+def remove_tag(tag_id):
+    try:
+        delete_tag(tag_id)
+    except TagError as e:
+        return jsonify(message=str(e)), 404
+    except Exception as e:
+        app.logger.exception("Fehler beim Löschen")
+        return jsonify(message=f"Datenbankfehler: {e}"), 500
+    return jsonify(message=f"Tag '{tag_id}' gelöscht.")
+
+
+@app.put("/api/tags/<tag_id>")
+def edit_tag(tag_id):
+    try:
+        update_tag(
+            tag_id,
+            request.form.get("pin", ""),
+            request.form.get("type", ""),
+            request.form.get("zaehler", ""),
+            request.form.get("besitzer", ""),
+            request.form.get("ausgabedatum", ""),
+            # Checkboxen werden nur mitgeschickt, wenn sie angehakt sind
+            aktiv="aktiv" in request.form,
+            geklaut="geklaut" in request.form,
+        )
+    except TagError as e:
+        return jsonify(message=str(e)), 400
+    except Exception as e:
+        app.logger.exception("Fehler beim Ändern")
+        return jsonify(message=f"Datenbankfehler: {e}"), 500
+    return jsonify(message="Änderungen gespeichert.")
 
 
 @app.post("/api/read_tag")

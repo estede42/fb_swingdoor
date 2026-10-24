@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Freibad Swingdoor</title>
+<link rel="stylesheet" href="/libs/dataTables.dataTables.min.css">
 <style>
   * { box-sizing: border-box; }
   body {
@@ -18,6 +19,7 @@
     box-shadow: 0 6px 18px rgba(0,0,0,.3);
   }
   .main-btn:hover { background: #e67700; }
+  .main-buttons { display: flex; flex-wrap: wrap; gap: 1.2rem; justify-content: center; }
   dialog {
     border: none; border-radius: 14px; padding: 1.6rem; width: min(92vw, 380px);
     box-shadow: 0 10px 40px rgba(0,0,0,.4);
@@ -25,7 +27,7 @@
   dialog::backdrop { background: rgba(0,40,80,.45); }
   h2 { margin: 0 0 1rem; }
   label { display: block; font-weight: 600; margin: .8rem 0 .3rem; }
-  input, select {
+  dialog input, dialog select {
     width: 100%; padding: .6rem; font-size: 1rem;
     border: 1px solid #aac; border-radius: 8px;
   }
@@ -51,10 +53,98 @@
   #msg { margin-top: .9rem; min-height: 1.2em; font-weight: 600; }
   #msg.err { color: #c62828; }
   #msg.good { color: #2e7d32; }
+
+  /* Datenansicht: Panel über 80 % des Bildschirms */
+  #dataPanel {
+    display: none; position: fixed; z-index: 10;
+    top: 10vh; left: 10vw; width: 80vw; height: 80vh;
+    flex-direction: column;
+    background: #fff; border-radius: 14px; padding: 1.2rem 1.4rem;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+  }
+  #dataPanel.show { display: flex; }
+  #dataBackdrop { display: none; position: fixed; inset: 0; z-index: 9; background: rgba(0,40,80,.45); }
+  #dataBackdrop.show { display: block; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
+  .panel-head h2 { margin: 0; }
+  .x-btn { border: none; background: none; font-size: 1.8rem; line-height: 1; cursor: pointer; color: #555; }
+  .table-wrap { flex: 1; overflow: auto; }
+  #dataMsg { min-height: 1.2em; font-weight: 600; margin-bottom: .4rem; }
+  #dataMsg.err { color: #c62828; }
+  #dataMsg.good { color: #2e7d32; }
+  .row-btn { border: none; background: none; cursor: pointer; font-size: 1.15rem; padding: .1rem .3rem; }
+  .row-btn:hover { background: #eef; border-radius: 6px; }
+  td.actions-col { white-space: nowrap; }
+  dialog input[type=checkbox] { width: auto; margin-right: .4rem; }
+  .check-row { display: flex; gap: 1.5rem; margin-top: .8rem; }
+  .check-row label { display: flex; align-items: center; margin: 0; }
+  #editMsg { margin-top: .9rem; min-height: 1.2em; font-weight: 600; }
+  #editMsg.err { color: #c62828; }
+  #editMsg.good { color: #2e7d32; }
 </style>
 </head>
 <body>
-  <button class="main-btn" id="open">Tag anlegen</button>
+  <div class="main-buttons">
+    <button class="main-btn" id="open">Tag anlegen</button>
+    <button class="main-btn" id="openData">Daten anzeigen</button>
+  </div>
+
+  <div id="dataBackdrop"></div>
+  <div id="dataPanel">
+    <div class="panel-head">
+      <h2>Tags</h2>
+      <button type="button" class="x-btn" id="closeData" title="Schließen">&times;</button>
+    </div>
+    <div id="dataMsg"></div>
+    <div class="table-wrap">
+      <table id="tagTable" class="display" style="width:100%">
+        <thead>
+          <tr>
+            <th></th><th>Tag ID</th><th>Typ</th><th>Besitzer</th><th>Zähler</th>
+            <th>Ausgabedatum</th><th>PIN</th><th>Aktiv</th><th>Geklaut</th>
+          </tr>
+        </thead>
+      </table>
+    </div>
+  </div>
+
+  <dialog id="editDlg">
+    <form id="editform">
+      <h2>Tag bearbeiten</h2>
+
+      <label for="e_tagID">Tag Nummer</label>
+      <input id="e_tagID" disabled>
+
+      <label for="e_pin">PIN</label>
+      <input id="e_pin" name="pin" inputmode="numeric" required
+             pattern="[0-9]{3,}" title="Mindestens 3 Ziffern" autocomplete="off">
+
+      <label for="e_type">Typ</label>
+      <select id="e_type" name="type" required>
+      	{% for kuerzel, name in types.items() %}<option value="{{ kuerzel }}">{{ name }}</option>{% endfor %}
+      </select>
+
+      <label for="e_zaehler">Zähler</label>
+      <input id="e_zaehler" name="zaehler" type="number" min="0" step="1" required>
+
+      <label for="e_besitzer">Besitzer</label>
+      <input id="e_besitzer" name="besitzer" autocomplete="off" placeholder="optional">
+
+      <label for="e_ausgabedatum">Ausgabedatum</label>
+      <input id="e_ausgabedatum" name="ausgabedatum" type="date" required>
+
+      <div class="check-row">
+        <label><input type="checkbox" id="e_aktiv" name="aktiv"> Aktiv</label>
+        <label><input type="checkbox" id="e_geklaut" name="geklaut"> Geklaut</label>
+      </div>
+
+      <div id="editMsg"></div>
+      <div class="actions">
+        <button type="button" class="cancel" id="editClose">Abbrechen</button>
+        <button type="submit" class="ok">Speichern</button>
+      </div>
+    </form>
+  </dialog>
 
 
   <dialog id="dlg">
@@ -173,6 +263,126 @@
     } catch (err) {
       msg.textContent = 'Server nicht erreichbar.';
       msg.className = 'err';
+    }
+  };
+</script>
+
+<script src="/libs/jquery-3.7.1.min.js"></script>
+<script src="/libs/dataTables.min.js"></script>
+<script>
+  // ---------- Datenansicht (DataTables) ----------
+  const TYPES = {{ types | tojson }};   // Kürzel -> Anzeigename
+  const dataPanel = document.getElementById('dataPanel');
+  const dataBackdrop = document.getElementById('dataBackdrop');
+  const dataMsg = document.getElementById('dataMsg');
+  const editDlg = document.getElementById('editDlg');
+  const editForm = document.getElementById('editform');
+  const editMsg = document.getElementById('editMsg');
+  let table = null;
+  let editTagID = null;
+
+  function showDataMsg(text, ok) {
+    dataMsg.textContent = text;
+    dataMsg.className = ok ? 'good' : 'err';
+  }
+
+  // Ältere Datensätze enthalten teils den Anzeigenamen statt des Kürzels -> Kürzel ermitteln
+  function typKuerzel(typ) {
+    if (typ in TYPES) return typ;
+    return Object.keys(TYPES).find(k => TYPES[k] === typ) || '';
+  }
+
+  const ja_nein = d => d ? 'Ja' : 'Nein';
+
+  function initTable() {
+    table = new DataTable('#tagTable', {
+      ajax: '/api/tags',
+      language: { url: '/libs/de-DE.json' },
+      order: [[1, 'asc']],
+      columns: [
+        { data: null, orderable: false, searchable: false, className: 'actions-col',
+          render: () => '<button class="row-btn del" title="Löschen">🗑️</button>'
+                      + '<button class="row-btn edit" title="Bearbeiten">✏️</button>' },
+        { data: 'tagID', render: DataTable.render.text() },
+        { data: 'typ', render: (d, type) => {
+            const name = TYPES[d] || d || '';
+            return type === 'display' ? DataTable.render.text().display(name) : name;
+        } },
+        { data: 'besitzer', defaultContent: '', render: DataTable.render.text() },
+        { data: 'zaehler' },
+        { data: 'ausgabedatum', defaultContent: '' },
+        { data: 'pin' },
+        { data: 'aktiv', render: ja_nein },
+        { data: 'geklaut', render: ja_nein },
+      ],
+    });
+
+    // Löschen
+    $('#tagTable tbody').on('click', 'button.del', async function () {
+      const row = table.row($(this).closest('tr'));
+      const id = row.data().tagID;
+      if (!confirm(`Tag "${id}" wirklich löschen?`)) return;
+      try {
+        const res = await fetch('/api/tags/' + encodeURIComponent(id), { method: 'DELETE' });
+        const data = await res.json();
+        showDataMsg(data.message, res.ok);
+        if (res.ok) row.remove().draw(false);
+      } catch (err) {
+        showDataMsg('Server nicht erreichbar.', false);
+      }
+    });
+
+    // Bearbeiten: Formular mit den Werten der Zeile füllen
+    $('#tagTable tbody').on('click', 'button.edit', function () {
+      const d = table.row($(this).closest('tr')).data();
+      editTagID = d.tagID;
+      editForm.reset();
+      document.getElementById('e_tagID').value = d.tagID;
+      document.getElementById('e_pin').value = d.pin ?? '';
+      document.getElementById('e_type').value = typKuerzel(d.typ);
+      document.getElementById('e_zaehler').value = d.zaehler ?? 0;
+      document.getElementById('e_besitzer').value = d.besitzer ?? '';
+      document.getElementById('e_ausgabedatum').value = d.ausgabedatum ?? '';
+      document.getElementById('e_aktiv').checked = !!d.aktiv;
+      document.getElementById('e_geklaut').checked = !!d.geklaut;
+      editMsg.textContent = ''; editMsg.className = '';
+      editDlg.showModal();
+    });
+  }
+
+  function openData() {
+    dataMsg.textContent = ''; dataMsg.className = '';
+    dataPanel.classList.add('show');
+    dataBackdrop.classList.add('show');
+    if (table) table.ajax.reload();   // neu angelegte Tags mit anzeigen
+    else initTable();
+  }
+  function closeData() {
+    dataPanel.classList.remove('show');
+    dataBackdrop.classList.remove('show');
+  }
+
+  document.getElementById('openData').onclick = openData;
+  document.getElementById('closeData').onclick = closeData;
+  dataBackdrop.onclick = closeData;
+  document.getElementById('editClose').onclick = () => editDlg.close();
+
+  editForm.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/tags/' + encodeURIComponent(editTagID),
+                              { method: 'PUT', body: new FormData(editForm) });
+      const data = await res.json();
+      editMsg.textContent = data.message;
+      editMsg.className = res.ok ? 'good' : 'err';
+      if (res.ok) {
+        showDataMsg(data.message, true);
+        table.ajax.reload(null, false);   // Tabelle neu laden, Seite beibehalten
+        setTimeout(() => editDlg.close(), 900);
+      }
+    } catch (err) {
+      editMsg.textContent = 'Server nicht erreichbar.';
+      editMsg.className = 'err';
     }
   };
 </script>
